@@ -19,6 +19,8 @@ import time
 import math
 import json
 from pathlib import Path
+from clearml import Task
+from tensorboardX import SummaryWriter
 
 import numpy as np
 from PIL import Image
@@ -126,10 +128,19 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+
+    parser.add_argument("--clearml", type=utils.bool_flag, default=True, help="Use ClearML to manage the experiment")
+    parser.add_argument("--clearml_project", default="SSL Card Valid", type=str, help="Name of the project in ClearML")
+    parser.add_argument("--clearml_task", default="Don't be lazy folks", type=str, help="Name of the experiment in ClearML")
     return parser
 
 
 def train_dino(args):
+    if args.clearml:
+        task = Task.init(project_name=args.clearml_project, task_name=args.clearml_task)
+        task.connect(args)
+    writer = SummaryWriter(args.output_dir)
+
     utils.init_distributed_mode(args)
     utils.fix_random_seeds(args.seed)
     print("git:\n  {}\n".format(utils.get_sha()))
@@ -272,7 +283,7 @@ def train_dino(args):
         # ============ training one epoch of DINO ... ============
         train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
             data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
-            epoch, fp16_scaler, args)
+            epoch, fp16_scaler, args, writer)
 
         # ============ writing logs ... ============
         save_dict = {
@@ -290,6 +301,9 @@ def train_dino(args):
             utils.save_on_master(save_dict, os.path.join(args.output_dir, f'checkpoint{epoch:04}.pth'))
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      'epoch': epoch}
+        writer.add_scalar(f'train_loss/epoch', log_stats['train_loss'], epoch*len(data_loader))
+        writer.add_scalar(f'train_lr/epoch', log_stats['train_lr'], epoch*len(data_loader))
+        writer.add_scalar(f'train_wd/epoch', log_stats['weight_decay'], epoch*len(data_loader))
         if utils.is_main_process():
             with (Path(args.output_dir) / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
@@ -300,7 +314,7 @@ def train_dino(args):
 
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
-                    fp16_scaler, args):
+                    fp16_scaler, args, writer):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
@@ -354,6 +368,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
+        writer.add_scalar(f'train_loss/iter', loss.item(), it)
+        writer.add_scalar(f'train_lr/iter', optimizer.param_groups[0]["lr"], it)
+        writer.add_scalar(f'train_wd/iter', optimizer.param_groups[0]["weight_decay"], it)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
