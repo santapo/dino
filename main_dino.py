@@ -303,7 +303,7 @@ def train_dino(args):
                      'epoch': epoch}
         writer.add_scalar(f'train_loss/epoch', log_stats['train_loss'], epoch*len(data_loader))
         writer.add_scalar(f'train_lr/epoch', log_stats['train_lr'], epoch*len(data_loader))
-        writer.add_scalar(f'train_wd/epoch', log_stats['weight_decay'], epoch*len(data_loader))
+        writer.add_scalar(f'train_wd/epoch', log_stats['train_wd'], epoch*len(data_loader))
         if utils.is_main_process():
             with (Path(args.output_dir) / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
