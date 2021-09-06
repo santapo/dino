@@ -20,6 +20,7 @@ import torch
 from torch import nn
 import torch.distributed as dist
 import torch.backends.cudnn as cudnn
+from torch.utils.data import random_split
 from torchvision import datasets
 from torchvision import transforms as pth_transforms
 from torchvision import models as torchvision_models
@@ -47,9 +48,14 @@ def eval_linear(args):
         pth_transforms.ToTensor(),
         pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
-    dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
+    # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
+    # dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+    dataset = datasets.ImageFolder(args.data_path, transform=train_transform)
+    total_samples = len(dataset)
+    total_train_samples = int(total_samples*0.1)
+    total_val_samples = total_samples - total_train_samples
+    dataset_train, dataset_val = random_split(dataset, lengths=[total_train_samples, total_val_samples])
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset_train) 
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
         sampler=sampler,
@@ -63,6 +69,7 @@ def eval_linear(args):
         num_workers=args.num_workers,
         pin_memory=True,
     )
+
     print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
 
     # ============ building network ... ============

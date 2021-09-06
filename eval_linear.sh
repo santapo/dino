@@ -1,0 +1,13 @@
+python eval_linear.py \
+    --n_last_blocks=4 \
+    --arch="vit_small" \
+    --patch_size=16 \
+    --pretrained_weight="runs/vitsmall_16_64_adamw/checkpoint.pth" \
+    --epochs=100 \
+    --lr=0.001 \
+    --batch_size_per_gpu=512 \
+    --data_path="../final_test_data/" \
+    --num_workers=4 \
+    --val_freq=1 \
+    --output_dir="runs/vitsmall_16_64_adamw/eval_linear" \
+    --num_labels=11
